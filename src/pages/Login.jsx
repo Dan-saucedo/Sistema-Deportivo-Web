@@ -1,95 +1,129 @@
-//PANTALLA 1: Inicio de sesion
+//Aquí comenzamos nuestro componente core 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import AuthLayout from '../components/AuthLayout.jsx';
+import { apiFetch } from '../services/apiClient.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
-function Login() {
+const Login = () => {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    nombre: '',
-    matricula: '',
-    carrera: 'Ingeniería en Desarrollo y Gestión de Software'
-  });
+  const location = useLocation();
+  const { login, estaAutenticado, esAdmin  } = useAuth();
 
-  useEffect(() => {
-    const sesionExistente = sessionStorage.getItem('sesion_estadia');
-  }, []);
+  useEffect(()=> {
+    if(estaAutenticado){
+      navigate(esAdmin ? '/admin' : '/dashboard', {replace: true})
+    }
+  }, [estaAutenticado, esAdmin, navigate]);
+
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const successMsg = location.state?.registeredMessage || '';
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (errorMsg) setErrorMsg('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.nombre || !formData.matricula) {
-      alert('Por favor complete los campos obligatorios');
+
+    if (!formData.email.trim() || !formData.password.trim()) {
+      setErrorMsg('Por favor completa tu correo electrónico y contraseña.');
       return;
     }
 
-    const payload = {
-      ...formData,
-      proyecto: '',
-      empresa: '',
-      fechaIngreso: new Date().toLocaleTimeString()
-    };
+    setIsLoading(true);
+    setErrorMsg('');
 
-    sessionStorage.setItem('sesion_estadia', JSON.stringify(payload))
+    try {
+      const response = await apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: {
+          email: formData.email.trim(),
+          password: formData.password,
+        },
+      });
 
+      const normalizedUser = {
+        ...response.user,
+        rol: response.user?.rol || response.user?.role || 'USER',
+      };
+
+      login(response.token, normalizedUser);
+
+      if (normalizedUser.rol === 'ADMIN') {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
+    } catch (err) {
+      setErrorMsg(err.message || 'No se pudo iniciar sesión. Verifica tus credenciales.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div style={styles.container}>
-      <form onSubmit={handleSubmit} style={styles.card}>
-        <h2 style={styles.title}>Acceso a Estadías UTR</h2>
-        <div style={styles.group}>
-          <label>Nombre Completo:</label>
-          <input 
-            type="text" 
-            name="nombre" 
-            value={formData.nombre} 
-            onChange={handleChange} 
-            style={styles.input}
-            placeholder="Ej. Juan Pérez"
-            required 
-          />
-        </div>
-        <div style={styles.group}>
-          <label>Matrícula:</label>
-          <input 
-            type="text" 
-            name="matricula" 
-            value={formData.matricula} 
-            onChange={handleChange} 
-            style={styles.input}
-            placeholder="Ej. 21000123"
-            required 
-          />
-        </div>
-        <div style={styles.group}>
-          <label>Carrera:</label>
-          <input 
-            type="text" 
-            name="carrera" 
-            value={formData.carrera} 
-            disabled 
-            style={{ ...styles.input, backgroundColor: '#f1f5f9' }} 
-          />
-        </div>
-        <button type="submit" style={styles.button}>Iniciar Sesión</button>
-      </form>
-    </div>
-  );
-}
+    <AuthLayout>
+      <span className="auth-eyebrow">BIENVENIDO DE NUEVO</span>
+      <h2 className="auth-title">Entra al juego.</h2>
+      <p className="auth-subtitle">Tu material deportivo, a unos clics.</p>
 
-const styles = {
-  container: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' },
-  card: { background: '#fff', padding: '2rem', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', width: '100%', maxWidth: '400px' },
-  title: { marginBottom: '1.5rem', textAlign: 'center', color: '#1e293b' },
-  group: { marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' },
-  input: { padding: '0.6rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.9rem' },
-  button: { width: '100%', padding: '0.75rem', background: '#0284c7', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', marginTop: '1rem' }
+      {successMsg && <div className="auth-alert-success">{successMsg}</div>}
+      {errorMsg && <div className="auth-alert-error">{errorMsg}</div>}
+
+      <form onSubmit={handleSubmit} noValidate>
+        <div className="auth-field">
+          <label className="auth-label" htmlFor="email">
+            Correo electrónico
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            className="auth-input"
+            placeholder="nombre@utr.edu.mx"
+            value={formData.email}
+            onChange={handleChange}
+            disabled={isLoading}
+            required
+          />
+        </div>
+
+        <div className="auth-field">
+          <label className="auth-label" htmlFor="password">
+            Contraseña
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            className="auth-input"
+            placeholder="*********"
+            value={formData.password}
+            onChange={handleChange}
+            disabled={isLoading}
+            required
+          />
+        </div>
+
+        <button type="submit" className="auth-btn-submit" disabled={isLoading}>
+          {isLoading ? 'Conectando...' : 'Iniciar sesión →'}
+        </button>
+      </form>
+
+      <p className="auth-switch">
+        ¿Aún no tienes cuenta?
+        <Link to="/register">Regístrate</Link>
+      </p>
+    </AuthLayout>
+  );
 };
 
-export default Login
+export default Login;
